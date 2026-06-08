@@ -1,0 +1,62 @@
+name: Build (macOS)
+
+# Builds a macOS (Intel/Apple-Silicon universal) standalone of FixIT using GameCI.
+# - Every push to main / manual run -> build is uploaded as a downloadable Artifact.
+# - Pushing a tag like v1.0 -> build is also attached to a GitHub Release.
+#
+# Requires a Unity license stored in repo secrets (see README -> "Building on GitHub").
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish Releases
+
+jobs:
+  build-macos:
+    name: Build for macOS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-StandaloneOSX-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-StandaloneOSX-
+            Library-
+
+      - name: Build macOS player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneOSX
+          buildName: FixIT
+
+      - name: Zip the .app
+        run: |
+          cd build/StandaloneOSX
+          zip -r ../../FixIT-macOS.zip .
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FixIT-macOS
+          path: FixIT-macOS.zip
+
+      - name: Attach to Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: FixIT-macOS.zip
